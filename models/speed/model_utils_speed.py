@@ -260,6 +260,8 @@ class PAPPM(nn.Module):
                         mode='bilinear', align_corners=algc)+x_)
         
         scale_out = self.scale_process(torch.cat(scale_list, 1))
+        print("SCALE OUT SIZEEEEEEE")
+        print(scale_out.size)
        
         out = self.compression(torch.cat([x_,scale_out], 1)) + self.shortcut(x)
         return out
@@ -288,7 +290,7 @@ class PagFM(nn.Module):
         x_k = self.f_x(x)
         
 
-        sim_map = torch.sigmoid(torch.sum(x_k * y_q, dim=1).unsqueeze(1))
+        sim_map = torch.sigmoid(torch.sum(x_k * y_q, dim=1).    (1))
         
         y = F.interpolate(y, size=[input_size[2], input_size[3]],
                             mode='bilinear', align_corners=False)

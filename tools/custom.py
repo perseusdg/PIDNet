@@ -75,15 +75,14 @@ if __name__ == '__main__':
     args = parse_args()
     images_list = glob.glob(args.r+'*'+args.t)
     sv_path = args.r+'outputs/'
+    cap = cv2.VideoCapture("yolo_test.mp4")
     
-    model = models.pidnet.get_pred_model(args.a, 19 if args.c else 11)
-    model = load_pretrained(model, args.p).cuda()
+    model = models.pidnet.get_pred_model(args.a, 16)
+    model = load_pretrained(model, "best.pt").cuda()
     model.eval()
     with torch.no_grad():
-        for img_path in images_list:
-            img_name = img_path.split("\\")[-1]
-            img = cv2.imread(os.path.join(args.r, img_name),
-                               cv2.IMREAD_COLOR)
+        while (cap.isOpened()):
+            ret,img = cap.read()
             sv_img = np.zeros_like(img).astype(np.uint8)
             img = input_transform(img)
             img = img.transpose((2, 0, 1)).copy()
@@ -96,13 +95,10 @@ if __name__ == '__main__':
             for i, color in enumerate(color_map):
                 for j in range(3):
                     sv_img[:,:,j][pred==i] = color_map[i][j]
-            sv_img = Image.fromarray(sv_img)
+            cv2.imshow('Output',sv_img)
+            cv2.waitKey(0)
             
-            if not os.path.exists(sv_path):
-                os.mkdir(sv_path)
-            sv_img.save(sv_path+img_name)
-            
-            
+    cap.release()
             
         
         

@@ -4,6 +4,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 BatchNorm2d = nn.BatchNorm2d
 bn_mom = 0.1
@@ -103,6 +104,7 @@ class segmenthead(nn.Module):
         out = self.conv2(self.relu(self.bn2(x)))
 
         if self.scale_factor is not None:
+            print("hello")
             height = x.shape[-2] * self.scale_factor
             width = x.shape[-1] * self.scale_factor
             out = F.interpolate(out,
@@ -246,22 +248,50 @@ class PAPPM(nn.Module):
 
     def forward(self, x):
         width = x.shape[-1]
-        height = x.shape[-2]        
+        height = x.shape[-2]       
+        print("scale height")
+        print(width)
+        print(height) 
         scale_list = []
 
         x_ = self.scale0(x)
-        scale_list.append(F.interpolate(self.scale1(x), size=[height, width],
-                        mode='bilinear', align_corners=algc)+x_)
-        scale_list.append(F.interpolate(self.scale2(x), size=[height, width],
-                        mode='bilinear', align_corners=algc)+x_)
+        x1 = F.interpolate(self.scale1(x), size=[height, width],
+                        mode='bilinear', align_corners=algc)
+        x1_cpu = x1.cpu().data.numpy()
+        x1_cpu = np.array(x1_cpu,dtype=np.float32)
+        x1_cpu.tofile("scale1_interpolate.bin",format="f")
+        print(x_.shape)
+        x2 = x1+x_
+        scale_list.append(x2)
+        x3 = self.scale2(x)
+        x3 = F.interpolate(x3,size=[height,width],mode='bilinear',align_corners=algc)
+        x3_cpu = x3.cpu().data.numpy()
+        x3_cpu = np.array(x3_cpu,dtype=np.float32)
+        x3_cpu.tofile("scale2_interpolate.bin",format="f")
+        scale_list.append(x3+x_)
         scale_list.append(F.interpolate(self.scale3(x), size=[height, width],
                         mode='bilinear', align_corners=algc)+x_)
         scale_list.append(F.interpolate(self.scale4(x), size=[height, width],
                         mode='bilinear', align_corners=algc)+x_)
         
-        scale_out = self.scale_process(torch.cat(scale_list, 1))
-       
-        out = self.compression(torch.cat([x_,scale_out], 1)) + self.shortcut(x)
+        x26 = torch.cat(scale_list, 1)
+        print("X26 size")
+        print(x26.shape)
+        x26_cpu = x26.cpu().data.numpy()
+        x26_cpu = np.array(x26_cpu,dtype=np.float32)
+        x26_cpu.tofile("dfm_concat.bim",format="f")
+        scale_out = self.scale_process(x26)
+
+        print("SCALE OUT SIZE")
+        print(scale_out.shape)
+
+        x99 = torch.cat([x_,scale_out], 1) 
+        x99_cpu = x99.cpu().data.numpy()
+        x99_cpu = np.array(x99_cpu,dtype=np.float32)
+        x99_cpu.tofile("dfm_concat_99.bin",format="f")
+        print("X99 TORCH CAT")
+        print(x99.shape)
+        out = self.compression(x99) + self.shortcut(x)
         return out
     
 
@@ -270,6 +300,11 @@ class PagFM(nn.Module):
         super(PagFM, self).__init__()
         self.with_channel = with_channel
         self.after_relu = after_relu
+        self.sim_map_1 = nn.Sequential(
+                                     nn.Sigmoid()
+                                    )
+    
+        
         self.f_x = nn.Sequential(
                                 nn.Conv2d(in_channels, mid_channels, 
                                           kernel_size=1, bias=False),
@@ -282,15 +317,17 @@ class PagFM(nn.Module):
                                 )
         if with_channel:
             self.up = nn.Sequential(
-                                    nn.Conv2d(mid_channels, in_channels, 
+                                    nn.Conv2d(mid_channels  , in_channels, 
                                               kernel_size=1, bias=False),
                                     BatchNorm(in_channels)
                                    )
         if after_relu:
             self.relu = nn.ReLU(inplace=True)
         
-    def forward(self, x, y):
+    def forward(self, x, y,name):
         input_size = x.size()
+        print(input_size[2])
+        print(input_size[3])
         if self.after_relu:
             y = self.relu(y)
             x = self.relu(x)
@@ -298,16 +335,59 @@ class PagFM(nn.Module):
         y_q = self.f_y(y)
         y_q = F.interpolate(y_q, size=[input_size[2], input_size[3]],
                             mode='bilinear', align_corners=False)
+        y_q_cpu = y_q.cpu().data.numpy()
+        y_q_cpu = np.array(y_q_cpu,dtype=np.float32)
+        f_name = name + "_interpolate.bin"
+        y_q_cpu.tofile(f_name,format="f")
         x_k = self.f_x(x)
         
+        
         if self.with_channel:
+            print("WITH_CHANNEL")
             sim_map = torch.sigmoid(self.up(x_k * y_q))
         else:
-            sim_map = torch.sigmoid(torch.sum(x_k * y_q, dim=1).unsqueeze(1))
+            print("x_k shape : ",x_k.shape)
+            print("y_q shape : ",y_q.shape)
+            mul = x_k*y_q
+            mul_cpu = mul.cpu().data.numpy()
+            mul_cpu = np.array(mul_cpu,dtype=np.float32)
+            f_m_name = name + "_mul.bin"
+            mul_cpu.tofile(f_m_name,format="f")
+            sim_map = self.sim_map_1(torch.sum(mul, dim=1).unsqueeze(1))
         
+        print(y.shape)
         y = F.interpolate(y, size=[input_size[2], input_size[3]],
                             mode='bilinear', align_corners=False)
-        x = (1-sim_map)*x + sim_map*y
+        y_name = name + "_compression_interpolate.bin"
+        y_cpu = y.cpu().data.numpy()
+        y_cpu = np.array(y_cpu,dtype=np.float32)
+        y_cpu.tofile(y_name,format="f")
+        print("SHAPEEEEEEEEEEEEEEEEEEEEEEEEEEEEE")
+        print(sim_map.shape)
+        print(y.shape)
+
+        t_t = (1-sim_map)
+        t_t_name = name+"_t_t.bin"
+        t_t_cpu = t_t.cpu().data.numpy()
+        t_t_cpu = np.array(t_t_cpu,dtype=np.float32)
+        t_t_cpu.tofile(t_t_name,format="f")
+
+        t_t_x = t_t*x
+        t_t_x_name = name+"_t_t_x.bin"
+        t_t_x_cpu = t_t_x.cpu().data.numpy()
+        t_t_x_cpu = np.array(t_t_x_cpu,dtype=np.float32)
+        t_t_x_cpu.tofile(t_t_x_name,format="f")
+        
+        y_sm = sim_map*y
+        y_sm_name = name + "_ysm.bin"
+        y_sm_cpu = y_sm.cpu().data.numpy()
+        y_sm_cpu = np.array(y_sm_cpu,dtype=np.float32)
+        y_sm_cpu.tofile(y_sm_name,format="f")
+        
+        x = t_t_x + y_sm
+        x_cpu = x.cpu().data.numpy()
+        x_cpu = np.array(x_cpu,dtype=np.float32)
+        x_cpu.tofile(name + "_cpu.bin",format="f")
         
         return x
     
@@ -327,6 +407,9 @@ class Light_Bag(nn.Module):
         
     def forward(self, p, i, d):
         edge_att = torch.sigmoid(d)
+        edge_att_cpu = edge_att.cpu().data.numpy()
+        edge_att_cpu = np.array(edge_att_cpu,dtype=np.float32)
+        edge_att_cpu.tofile("dfm_edge_att_cpu.bin",format="f")
         
         p_add = self.conv_p((1-edge_att)*i + p)
         i_add = self.conv_i(i + edge_att*p)
@@ -374,6 +457,9 @@ class Bag(nn.Module):
         
     def forward(self, p, i, d):
         edge_att = torch.sigmoid(d)
+        edge_att_cpu = edge_att.cpu().data.numpy()
+        edge_att_cpu = np.array(edge_att_cpu,dtype=np.float32)
+        edge_att_cpu.tofile("dfm_edge_att.bin",format="f")
         return self.conv(edge_att*p + (1-edge_att)*i)
     
 

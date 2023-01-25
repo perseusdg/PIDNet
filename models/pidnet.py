@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import time
 from .model_utils import BasicBlock, Bottleneck, segmenthead, DAPPM, PAPPM, PagFM, Bag, Light_Bag
 import logging
-
+import numpy as np
 BatchNorm2d = nn.BatchNorm2d
 bn_mom = 0.1
 algc = False
@@ -145,9 +145,10 @@ class PIDNet(nn.Module):
         x_d = self.layer3_d(x)
         
         x = self.relu(self.layer3(x))
-        x_ = self.pag3(x_, self.compression3(x))
+        x_ = self.pag3(x_, self.compression3(x),"pag3")
+        x_t = self.diff3(x)
         x_d = x_d + F.interpolate(
-                        self.diff3(x),
+                        x_t,
                         size=[height_output, width_output],
                         mode='bilinear', align_corners=algc)
         if self.augment:
@@ -157,20 +158,33 @@ class PIDNet(nn.Module):
         x_ = self.layer4_(self.relu(x_))
         x_d = self.layer4_d(self.relu(x_d))
         
-        x_ = self.pag4(x_, self.compression4(x))
+        x_ = self.pag4(x_, self.compression4(x),"pag4")
         x_d = x_d + F.interpolate(
                         self.diff4(x),
                         size=[height_output, width_output],
                         mode='bilinear', align_corners=algc)
+        x_d_t = self.relu(x_d)
+        o_t = x_d_t.detach().cpu().numpy()
+        print("DIFF 4 SHAPE : ",o_t.shape)
+        o_t.tofile("layerdiff4.bin",format="f")
         if self.augment:
             temp_d = x_d
             
         x_ = self.layer5_(self.relu(x_))
-        x_d = self.layer5_d(self.relu(x_d))
+        x_d = self.layer5_d(x_d_t)
+        print("HEIGHT OUTPUT" ,height_output)
+        print("WIDTH_OUTPUT",width_output)
+        print("ALGC",algc)
+        x_o = self.spp(self.layer5(x))
+        print(x_o.shape)
         x = F.interpolate(
-                        self.spp(self.layer5(x)),
+                        x_o,
                         size=[height_output, width_output],
                         mode='bilinear', align_corners=algc)
+        x_t_o = x.cpu().data.numpy()
+        x_t_o = np.array(x_t_o,dtype=np.float32)
+        x_t_o.tofile("dfm_interpolate.bin",format="f")
+
 
         x_ = self.final_layer(self.dfm(x_, x, x_d))
 
