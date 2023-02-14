@@ -165,25 +165,25 @@ class PIDNet(nn.Module):
                         mode='bilinear', align_corners=algc)
         x_d_t = self.relu(x_d)
         o_t = x_d_t.detach().cpu().numpy()
-        print("DIFF 4 SHAPE : ",o_t.shape)
-        o_t.tofile("layerdiff4.bin",format="f")
+        # print("DIFF 4 SHAPE : ",o_t.shape)
+        # o_t.tofile("layerdiff4.bin",format="f")
         if self.augment:
             temp_d = x_d
             
         x_ = self.layer5_(self.relu(x_))
         x_d = self.layer5_d(x_d_t)
-        print("HEIGHT OUTPUT" ,height_output)
-        print("WIDTH_OUTPUT",width_output)
-        print("ALGC",algc)
+        # print("HEIGHT OUTPUT" ,height_output)
+        # print("WIDTH_OUTPUT",width_output)
+        # print("ALGC",algc)
         x_o = self.spp(self.layer5(x))
-        print(x_o.shape)
+        # print(x_o.shape)
         x = F.interpolate(
                         x_o,
                         size=[height_output, width_output],
                         mode='bilinear', align_corners=algc)
         x_t_o = x.cpu().data.numpy()
         x_t_o = np.array(x_t_o,dtype=np.float32)
-        x_t_o.tofile("dfm_interpolate.bin",format="f")
+        # x_t_o.tofile("dfm_interpolate.bin",format="f")
 
 
         x_ = self.final_layer(self.dfm(x_, x, x_d))

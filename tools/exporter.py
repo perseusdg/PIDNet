@@ -84,6 +84,11 @@ def exporter():
     pred_np = pred.cpu().data.numpy()
     pred_np = np.array(pred_np,dtype=np.float32)
     pred_np.tofile("tkdnn_bin/debug/output.bin",format="f")
+
+    pred_topk = torch.argmax(pred, dim=1).squeeze(0);
+    pred_topk_np = pred_topk.cpu().data.numpy();
+    pred_topk_np = np.array(pred_topk_np,dtype=np.float32)
+    pred_topk_np.tofile("tkdnn_bin/debug/output_topk.bin",format="f")
     
     for n,m in model.named_modules():
         t = '-'.join(n.split('.'))
